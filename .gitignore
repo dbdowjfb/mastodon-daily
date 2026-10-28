@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.local
+public/items.json
+public/feed.xml
+public/index.html
+public/media/
+
+# Local Netlify folder
+.netlify

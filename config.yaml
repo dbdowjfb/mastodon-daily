@@ -1,0 +1,62 @@
+mastodon:
+  base_url: ${MASTODON_BASE_URL,https://mas.to}
+  access_token: ${MASTODON_TOKEN}
+  account_id: ${MASTODON_ACCOUNT_ID,}      # 留空则自动用 verify_credentials 获取
+
+signals:                                    # 兴趣画像来源
+  favourites_limit: 40
+  bookmarks_limit: 40
+  boosts_limit: 40
+
+profile:
+  max_items: 30                             # 喂给 LLM 的兴趣样例条数
+  max_images: 12                            # 喂给 LLM 的兴趣样例图片数
+
+candidates:                                 # 候选来源：home + global public + global local
+  home_limit: 40
+  local_limit: 40
+  global_limit: 40
+  window_hours: 48
+  max_candidates: 60
+
+llm:
+  base_url: ${DEEPSEEK_BASE_URL,https://api.deepseek.com}
+  api_key: ${DEEPSEEK_API_KEY}
+  model: ${DEEPSEEK_MODEL,deepseek-flash}
+  max_tokens: 6000
+  temperature: 0.3
+
+caption:                                      # 图片→alt 文本，用文本侧排序替代 CLIP 图-图相似度
+  enabled: true
+  base_url: ${CAPTION_BASE_URL,}              # 留空则复用 llm.base_url
+  api_key: ${CAPTION_API_KEY,}                # 留空则复用 llm.api_key
+  model: ${CAPTION_MODEL,}                    # 留空则复用 llm.model（需支持图片输入）
+  max_tokens: 1500
+  per_post: 1                                 # 每条帖子取前几张图做 alt
+  max_images: 60                              # 本次最多 caption 的图片数
+  batch: 6                                    # 每次请求发送的图片数
+  max_px: 512                                 # 图片缩放上限（省流量/费用）
+
+rank:
+  top_n: 20                                 # 每日推荐条数
+
+reranker:                                    # 本地 embedding 排序；不可用时自动回退启发式
+  enabled: true
+  model: jinaai/jina-embeddings-v5-text-nano # 多语言模型，日/中/英通用
+  trust_remote_code: true
+  encode_kwargs:
+    task: retrieval                          # 该模型必须指定；不支持则整个 reranker 回退
+    prompt_name: document
+  image:                                     # 图片侧：CLIP 图-图相似度；已由 caption(alt 文本) 替代
+    enabled: false
+    model: sentence-transformers/clip-ViT-B-32
+    weight: 0.5                              # 图分权重（文本 0.5）；单模态时该模态权重=1
+    max_images_per_post: 1
+    max_profile_images: 30
+
+feed:
+  title: Mastodon Daily 推荐
+  link: ${FEED_LINK,https://deploy-preview-1--mastodon-daily-feed.netlify.app}
+  description: 基于你的收藏 / 转嘟 / 书签自动生成的每日 Mastodon 推荐
+  output_dir: public
+  max_items_kept: 100                       # feed 里保留的历史条目上限

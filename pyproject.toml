@@ -1,0 +1,31 @@
+[project]
+name = "mastodon-daily"
+version = "0.1.0"
+description = "Daily Mastodon recommendations as an RSS feed, ranked by an LLM from your favourites/boosts/bookmarks"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+embed = [
+    "sentence-transformers>=3.0",
+    "numpy>=1.24",
+    "peft>=0.11",
+    "Pillow>=10",
+]
+test = [
+    "pytest>=7",
+    "numpy>=1.24",
+    "Pillow>=10",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mastodon_daily*"]
+exclude = ["tests*", "build*"]

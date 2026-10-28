@@ -1,0 +1,64 @@
+name: Mastodon Daily RSS
+
+# Triggered by the hw VPS (via the GitHub API workflow_dispatch) because GitHub's
+# own cron is unreliable. The build publishes the feed by pushing public/ to the
+# `feed` branch; an open PR `feed` -> `main` makes Netlify build a *Deploy Preview*
+# (unlimited/free, unlike production deploys which cost credits) served at
+# https://deploy-preview-1--mastodon-daily-feed.netlify.app/feed.xml
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      MASTODON_BASE_URL: ${{ secrets.MASTODON_BASE_URL }}
+      MASTODON_TOKEN: ${{ secrets.MASTODON_TOKEN }}
+      MASTODON_ACCOUNT_ID: ${{ secrets.MASTODON_ACCOUNT_ID }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
+      DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
+      FEED_LINK: https://deploy-preview-1--mastodon-daily-feed.netlify.app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[embed,test]"
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Build feed
+        run: |
+          mkdir -p public
+          # Fresh data each run (no persistence).
+          rm -f public/items.json public/feed.xml public/index.html
+          python -m mastodon_daily.main
+
+      - name: Publish to feed branch (Netlify Deploy Preview)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B feed
+          git add -f public/
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore: update mastodon daily RSS"
+            git push -f origin feed
+          fi
