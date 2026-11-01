@@ -28,11 +28,10 @@ llm:
 
 caption:                                      # 图片→alt 文本，用文本侧排序替代 CLIP 图-图相似度
   enabled: true
-  provider: local                             # 'api'（DeepSeek/OpenAI 兼容视觉接口）或 'local'（Florence-2 本地模型）
+  provider: local                             # 'api'（DeepSeek/OpenAI 兼容视觉接口）或 'local'（BLIP 本地模型）
   base_url: ${CAPTION_BASE_URL,}              # provider=api 时生效；留空则复用 llm.base_url
   api_key: ${CAPTION_API_KEY,}                # provider=api 时生效；留空则复用 llm.api_key
-  model: microsoft/Florence-2-base            # provider=local 为本地模型 id；provider=api 为接口模型名
-  prompt: <CAPTION>                           # Florence-2 任务：<CAPTION> / <DETAILED_CAPTION> / <MORE_DETAILED_CAPTION>
+  model: Salesforce/blip-image-captioning-base  # provider=local 为本地模型 id；provider=api 为接口模型名
   max_tokens: 1500
   per_post: 1                                 # 每条帖子取前几张图做 alt
   max_images: 60                              # 本次最多 caption 的图片数

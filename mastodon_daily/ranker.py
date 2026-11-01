@@ -170,7 +170,7 @@ def resolve_caption_cfg(cfg: dict) -> dict:
 
     Supports two providers:
       - "api": an OpenAI-compatible vision endpoint (e.g. DeepSeek), needs an api_key.
-      - "local": a local Florence-2 model, no api_key needed.
+      - "local": a local BLIP captioning model, no api_key needed.
     Returns {"enabled": False} when captioning is off or unusable.
     """
     cap = dict((cfg or {}).get("caption") or {})
@@ -181,7 +181,7 @@ def resolve_caption_cfg(cfg: dict) -> dict:
     if provider not in ("api", "local"):
         provider = "api"
     if provider == "local":
-        model = cap.get("model") or "microsoft/Florence-2-base"
+        model = cap.get("model") or "Salesforce/blip-image-captioning-base"
     else:
         model = cap.get("model") or llm.get("model") or "deepseek-flash"
     return {
@@ -190,7 +190,6 @@ def resolve_caption_cfg(cfg: dict) -> dict:
         "base_url": cap.get("base_url") or llm.get("base_url") or "https://api.deepseek.com",
         "api_key": cap.get("api_key") or llm.get("api_key"),
         "model": model,
-        "prompt": cap.get("prompt") or "<CAPTION>",
         "max_tokens": cap.get("max_tokens", 1500),
         "per_post": int(cap.get("per_post", 1) or 1),
         "batch": max(1, int(cap.get("batch", 6) or 6)),
@@ -260,56 +259,46 @@ def _caption_call(vcfg: dict, data_urls):
     return [caps[i] if i < len(caps) and isinstance(caps[i], str) else "" for i in range(n)]
 
 
-_FLORENCE2 = None  # lazy singleton: (model, processor)
+_CAPTION_MODEL = None  # lazy singleton: (model, processor)
 
 
-def _load_florence2(model_id: str):
-    """Lazy-load the Florence-2 model + processor (cached per process)."""
-    global _FLORENCE2
-    if _FLORENCE2 is None:
-        # microsoft/Florence-2-base ships its own processor/modeling code and must be
-        # loaded with trust_remote_code=True (its tokenizer is Roberta-based).
-        from transformers import AutoModelForCausalLM, AutoProcessor
+def _load_caption_model(model_id: str):
+    """Lazy-load the local captioning model + processor (cached per process)."""
+    global _CAPTION_MODEL
+    if _CAPTION_MODEL is None:
+        from transformers import BlipForConditionalGeneration, BlipProcessor
 
-        _FLORENCE2 = (
-            AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True),
-            AutoProcessor.from_pretrained(model_id, trust_remote_code=True),
+        _CAPTION_MODEL = (
+            BlipForConditionalGeneration.from_pretrained(model_id),
+            BlipProcessor.from_pretrained(model_id),
         )
-    return _FLORENCE2
+    return _CAPTION_MODEL
 
 
-def _florence_caption(model, processor, image, prompt: str) -> str:
-    """Run a Florence-2 task (e.g. <CAPTION>) on a PIL image and return the text."""
+def _caption_image(model, processor, image) -> str:
+    """Caption a PIL image with the local captioning model (e.g. BLIP)."""
     import torch
 
-    inputs = processor(text=prompt, images=image, return_tensors="pt")
+    inputs = processor(images=image, return_tensors="pt")
     with torch.no_grad():
-        generated_ids = model.generate(
-            input_ids=inputs["input_ids"],
-            pixel_values=inputs["pixel_values"],
-            max_new_tokens=64,
-            do_sample=False,
-        )
-    text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
-    parsed = processor.post_process_generation(text, task=prompt, image_size=image.size)
-    return (parsed.get(prompt) or "").strip()
+        generated_ids = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+    return (processor.batch_decode(generated_ids, skip_special_tokens=True)[0] or "").strip()
 
 
 def _caption_local(vcfg: dict, targets) -> int:
-    """Caption images with a local Florence-2 model; returns number of items captioned."""
-    model_id = vcfg.get("model") or "microsoft/Florence-2-base"
-    prompt = vcfg.get("prompt") or "<CAPTION>"
+    """Caption images with a local model (BLIP); returns number of items captioned."""
+    model_id = vcfg.get("model") or "Salesforce/blip-image-captioning-base"
     max_px = int(vcfg.get("max_px", 512) or 512)
     try:
-        model, processor = _load_florence2(model_id)
+        model, processor = _load_caption_model(model_id)
     except Exception as e:
-        _log(f"florence2 load failed: {e}")
+        _log(f"caption model load failed: {e}")
         return 0
     done = 0
     for _it, u in targets:
         try:
             img = _fetch_image(u, max_px)
-            cap = _florence_caption(model, processor, img, prompt)
+            cap = _caption_image(model, processor, img)
         except Exception:
             continue
         cap = (cap or "").strip()
@@ -324,7 +313,7 @@ def caption_items(vcfg: dict, items) -> int:
     """Attach alt text for each item's first image(s) under `_alt`.
 
     Supports an OpenAI-compatible vision API (provider="api") or a local
-    Florence-2 model (provider="local"). Captions are folded into the text used
+    BLIP model (provider="local"). Captions are folded into the text used
     for ranking, so only the text embedding model is needed. Every failure is
     swallowed (returns what succeeded) so ranking still works on text alone.
     """
