@@ -1,6 +1,7 @@
 """Entry point: fetch signals + candidates, rank with LLM, emit RSS."""
 import json
 import os
+import random
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -98,6 +99,7 @@ def collect_candidates(m, cfg, engaged):
             out.append(n)
             kept += 1
         log(f"  {src}: {len(lst)} raw -> {kept} kept")
+    random.shuffle(out)
     out = out[: c["max_candidates"]]
     log(f"  total candidates: {len(out)}")
     return out
