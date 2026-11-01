@@ -16,8 +16,11 @@ def make_item(c: dict, reason: str, score, feed_link=None) -> dict:
     tr = (c.get("translation") or "").strip()
     if tr and tr != (c.get("text") or "").strip():
         desc += f"<p>（译）{html.escape(tr)}</p>"
-    for u in (c.get("media") or [])[:4]:
-        desc += f'<p><img src="{html.escape(u)}" /></p>'
+    media = c.get("media") or []
+    alt = (c.get("_alt") or "").strip()
+    for i, u in enumerate(media[:4]):
+        a = f' alt="{html.escape(alt)}"' if (i == 0 and alt) else ""
+        desc += f'<p><img src="{html.escape(u)}"{a} /></p>'
     if c.get("url"):
         src = html.escape(c["url"])
         desc += f'<p>原文：<a href="{src}">{src}</a></p>'
