@@ -166,19 +166,31 @@ def translate_to_zh(llm_cfg: dict, texts):
 
 
 def resolve_caption_cfg(cfg: dict) -> dict:
-    """Merge the `caption` block with `llm` so images can be captioned via the same endpoint.
+    """Merge the `caption` block with `llm` so images can be captioned.
 
+    Supports two providers:
+      - "api": an OpenAI-compatible vision endpoint (e.g. DeepSeek), needs an api_key.
+      - "local": a local Florence-2 model, no api_key needed.
     Returns {"enabled": False} when captioning is off or unusable.
     """
     cap = dict((cfg or {}).get("caption") or {})
     if not cap.get("enabled", True):
         return {"enabled": False}
     llm = (cfg or {}).get("llm") or {}
+    provider = (cap.get("provider") or "api").strip().lower()
+    if provider not in ("api", "local"):
+        provider = "api"
+    if provider == "local":
+        model = cap.get("model") or "microsoft/Florence-2-base"
+    else:
+        model = cap.get("model") or llm.get("model") or "deepseek-flash"
     return {
         "enabled": True,
+        "provider": provider,
         "base_url": cap.get("base_url") or llm.get("base_url") or "https://api.deepseek.com",
         "api_key": cap.get("api_key") or llm.get("api_key"),
-        "model": cap.get("model") or llm.get("model") or "deepseek-flash",
+        "model": model,
+        "prompt": cap.get("prompt") or "<CAPTION>",
         "max_tokens": cap.get("max_tokens", 1500),
         "per_post": int(cap.get("per_post", 1) or 1),
         "batch": max(1, int(cap.get("batch", 6) or 6)),
@@ -187,9 +199,8 @@ def resolve_caption_cfg(cfg: dict) -> dict:
     }
 
 
-def _data_url(url: str, max_px: int = 512, timeout: int = 30) -> str:
-    """Download an image and return a (downscaled) base64 data URL for a vision model."""
-    import base64
+def _fetch_image(url: str, max_px: int = 512, timeout: int = 30):
+    """Download an image and return a (downscaled) RGB PIL Image."""
     import io
 
     from PIL import Image
@@ -199,6 +210,15 @@ def _data_url(url: str, max_px: int = 512, timeout: int = 30) -> str:
     im = Image.open(io.BytesIO(r.content)).convert("RGB")
     if max_px:
         im.thumbnail((max_px, max_px))
+    return im
+
+
+def _data_url(url: str, max_px: int = 512, timeout: int = 30) -> str:
+    """Download an image and return a (downscaled) base64 data URL for a vision model."""
+    import base64
+    import io
+
+    im = _fetch_image(url, max_px, timeout)
     buf = io.BytesIO()
     im.save(buf, format="JPEG", quality=85)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
@@ -240,14 +260,73 @@ def _caption_call(vcfg: dict, data_urls):
     return [caps[i] if i < len(caps) and isinstance(caps[i], str) else "" for i in range(n)]
 
 
-def caption_items(vcfg: dict, items) -> int:
-    """Attach LLM-generated alt text for each item's first image(s) under `_alt`.
+_FLORENCE2 = None  # lazy singleton: (model, processor)
 
-    This replaces the CLIP image-embedding side: captions are folded into the text
-    used for ranking, so only the text embedding model is needed. Every failure is
+
+def _load_florence2(model_id: str):
+    """Lazy-load the Florence-2 model + processor (cached per process)."""
+    global _FLORENCE2
+    if _FLORENCE2 is None:
+        from transformers import AutoModelForCausalLM, AutoProcessor
+
+        _FLORENCE2 = (
+            AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True),
+            AutoProcessor.from_pretrained(model_id, trust_remote_code=True),
+        )
+    return _FLORENCE2
+
+
+def _florence_caption(model, processor, image, prompt: str) -> str:
+    """Run a Florence-2 task (e.g. <CAPTION>) on a PIL image and return the text."""
+    import torch
+
+    inputs = processor(text=prompt, images=image, return_tensors="pt")
+    with torch.no_grad():
+        generated_ids = model.generate(
+            input_ids=inputs["input_ids"],
+            pixel_values=inputs["pixel_values"],
+            max_new_tokens=64,
+            do_sample=False,
+        )
+    text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    parsed = processor.post_process_generation(text, task=prompt, image_size=image.size)
+    return (parsed.get(prompt) or "").strip()
+
+
+def _caption_local(vcfg: dict, targets) -> int:
+    """Caption images with a local Florence-2 model; returns number of items captioned."""
+    model_id = vcfg.get("model") or "microsoft/Florence-2-base"
+    prompt = vcfg.get("prompt") or "<CAPTION>"
+    max_px = int(vcfg.get("max_px", 512) or 512)
+    try:
+        model, processor = _load_florence2(model_id)
+    except Exception as e:
+        _log(f"florence2 load failed: {e}")
+        return 0
+    done = 0
+    for _it, u in targets:
+        try:
+            img = _fetch_image(u, max_px)
+            cap = _florence_caption(model, processor, img, prompt)
+        except Exception:
+            continue
+        cap = (cap or "").strip()
+        if not cap:
+            continue
+        _it["_alt"] = (_it.get("_alt", "") + " " + cap).strip()
+        done += 1
+    return done
+
+
+def caption_items(vcfg: dict, items) -> int:
+    """Attach alt text for each item's first image(s) under `_alt`.
+
+    Supports an OpenAI-compatible vision API (provider="api") or a local
+    Florence-2 model (provider="local"). Captions are folded into the text used
+    for ranking, so only the text embedding model is needed. Every failure is
     swallowed (returns what succeeded) so ranking still works on text alone.
     """
-    if not vcfg or not vcfg.get("enabled", True) or not vcfg.get("api_key"):
+    if not vcfg or not vcfg.get("enabled", True):
         return 0
     per = int(vcfg.get("per_post", 1) or 1)
     batch = max(1, int(vcfg.get("batch", 6) or 6))
@@ -258,6 +337,12 @@ def caption_items(vcfg: dict, items) -> int:
             if u:
                 targets.append((it, u))
     targets = targets[: int(vcfg.get("max_images", 60) or 60)]
+
+    if vcfg.get("provider") == "local":
+        return _caption_local(vcfg, targets)
+
+    if not vcfg.get("api_key"):
+        return 0
 
     done = 0
     for i in range(0, len(targets), batch):
