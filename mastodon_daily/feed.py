@@ -21,6 +21,8 @@ def make_item(c: dict, reason: str, score, feed_link=None) -> dict:
     for i, u in enumerate(media[:4]):
         a = f' alt="{html.escape(alt)}"' if (i == 0 and alt) else ""
         desc += f'<p><img src="{html.escape(u)}"{a} /></p>'
+        if i == 0 and alt:
+            desc += f'<p class="img-alt">🖼 {html.escape(alt)}</p>'
     if c.get("url"):
         src = html.escape(c["url"])
         desc += f'<p>原文：<a href="{src}">{src}</a></p>'
@@ -122,6 +124,7 @@ def render_index_html(cfg: dict, items) -> str:
  h1{{font-size:1.3rem}} a{{color:#1a73e8;text-decoration:none}} a:hover{{text-decoration:underline}}
  ul{{list-style:none;padding:0}} li{{padding:1rem 0;border-bottom:1px solid #eee}}
  .meta{{color:#888;font-size:.8rem;margin:.2rem 0}} .desc img{{max-width:100%;border-radius:6px;margin-top:.4rem}}
+ .img-alt{{color:#888;font-size:.85rem;margin:-.2rem 0 .6rem}}
  .sub a{{font-size:.9rem}}
 </style></head><body>
 <h1>{html.escape(feed['title'])}</h1>
