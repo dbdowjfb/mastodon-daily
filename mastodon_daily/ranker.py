@@ -267,12 +267,13 @@ def _load_florence2(model_id: str):
     """Lazy-load the Florence-2 model + processor (cached per process)."""
     global _FLORENCE2
     if _FLORENCE2 is None:
-        # Native transformers classes (>=4.41) — no trust_remote_code needed.
-        from transformers import Florence2ForConditionalGeneration, Florence2Processor
+        # microsoft/Florence-2-base ships its own processor/modeling code and must be
+        # loaded with trust_remote_code=True (its tokenizer is Roberta-based).
+        from transformers import AutoModelForCausalLM, AutoProcessor
 
         _FLORENCE2 = (
-            Florence2ForConditionalGeneration.from_pretrained(model_id),
-            Florence2Processor.from_pretrained(model_id),
+            AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True),
+            AutoProcessor.from_pretrained(model_id, trust_remote_code=True),
         )
     return _FLORENCE2
 
