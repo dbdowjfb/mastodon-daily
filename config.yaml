@@ -56,7 +56,7 @@ reranker:                                    # 本地 embedding 排序；不可�
 
 feed:
   title: Mastodon Daily 推荐
-  link: ${FEED_LINK,https://deploy-preview-1--mastodon-daily-feed.netlify.app}
+  link: ${FEED_LINK,https://mstdndaily.netlify.app}
   description: 基于你的收藏 / 转嘟 / 书签自动生成的每日 Mastodon 推荐
   output_dir: public
   max_items_kept: 100                       # feed 里保留的历史条目上限

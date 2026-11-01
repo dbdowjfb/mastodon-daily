@@ -26,7 +26,7 @@ mkdir -p public
 rm -f public/items.json public/feed.xml public/index.html
 
 # Use Netlify's own site URL for the RSS <link> unless FEED_LINK is set explicitly.
-export FEED_LINK="${FEED_LINK:-${URL:-https://mastodon-daily.netlify.app}}"
+export FEED_LINK="${FEED_LINK:-${URL:-https://mstdndaily.netlify.app}}"
 
 python -m mastodon_daily.main
 

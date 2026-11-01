@@ -4,7 +4,7 @@ name: Mastodon Daily RSS
 # own cron is unreliable. The build publishes the feed by pushing public/ to the
 # `feed` branch; an open PR `feed` -> `main` makes Netlify build a *Deploy Preview*
 # (unlimited/free, unlike production deploys which cost credits) served at
-# https://deploy-preview-1--mastodon-daily-feed.netlify.app/feed.xml
+# https://mstdndaily.netlify.app/feed.xml
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
       DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
-      FEED_LINK: https://deploy-preview-1--mastodon-daily-feed.netlify.app
+      FEED_LINK: https://mstdndaily.netlify.app
     steps:
       - name: Checkout
         uses: actions/checkout@v6
