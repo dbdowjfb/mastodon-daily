@@ -476,7 +476,12 @@ def _rank_embeddings(profile, candidates, top_n: int, cfg):
             idx = [i for i, t in enumerate(cand_texts) if t]
             if idx:
                 cv = np.asarray(_encode(tm, [cand_texts[i] for i in idx], cfg))
-                s = (cv @ pv.T) @ _recency_weights(len(prof_texts), np)
+
+                sim_matrix = cv @ pv.T          # [N, M]
+                # 对每行排序，取最相似的前 3 个历史样例求平均（如果历史不足3条则取全部）
+                k = min(3, sim_matrix.shape[1])
+                s = np.mean(np.sort(sim_matrix, axis=1)[:, -k:], axis=1)
+                #s = (cv @ pv.T) @ _recency_weights(len(prof_texts), np)
                 for j, i in enumerate(idx):
                     ts[i] = float(s[j])
         except Exception:
