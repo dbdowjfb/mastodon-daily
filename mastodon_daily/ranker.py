@@ -481,18 +481,17 @@ def _rank_embeddings(profile, candidates, top_n: int, cfg):
                 # 对每行排序，取最相似的前 3 个历史样例求平均（如果历史不足3条则取全部）
                 k = min(3, sim_matrix.shape[1])
 
-                sim_score = np.mean(np.sort(sim_matrix, axis=1)[:, -k:], axis=1) + 0.25 * np.sqrt (x @  np.linalg.inv( ( pv.T @ (pv + eye(len( pv. T @ pv))) ) ) @ x )
-
-                                # 2. LinUCB 探索项 (加正则化单位阵并求逆)
+                # 1. 相似度：Top-3 MaxSim
+                sim_score = np.mean(np.sort(sim_matrix, axis=1)[:, -k:], axis=1)
+                # 2. LinUCB 探索项 (加正则化单位阵并求逆)
                 lambda_reg = 1.0
                 D = pv.shape[1]
                 A = pv.T @ pv + lambda_reg * np.eye(D)
                 A_inv = np.linalg.inv(A)
-                # 向量化计算每条候选的不确定度 (探索项)
+                # 向量化计算每条候选的不确定度 (探索项)：sqrt(cv_i^T @ A_inv @ cv_i)
                 explore_bonus = np.sqrt(np.maximum(np.sum((cv @ A_inv) * cv, axis=1), 0))
-                # 3. 综合打分
+                # 3. 综合打分（相关性 + 探索加成）
                 s = sim_score + 0.25 * explore_bonus
-                #s = (cv @ pv.T) @ _recency_weights(len(prof_texts), np)
                 for j, i in enumerate(idx):
                     ts[i] = float(s[j])
         except Exception:
