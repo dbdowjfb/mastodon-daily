@@ -8,6 +8,8 @@ name: Mastodon Daily RSS
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 22 * * *'   # 22:00 UTC = 06:00 +08 (fallback if hw misses)
 
 permissions:
   contents: write
