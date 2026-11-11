@@ -491,7 +491,7 @@ def _rank_embeddings(profile, candidates, top_n: int, cfg):
                 # 向量化计算每条候选的不确定度 (探索项)：sqrt(cv_i^T @ A_inv @ cv_i)
                 explore_bonus = np.sqrt(np.maximum(np.sum((cv @ A_inv) * cv, axis=1), 0))
                 # 3. 综合打分（相关性 + 探索加成）
-                s = sim_score + 0.25 * explore_bonus
+                s = sim_score + 0.5 * explore_bonus
                 for j, i in enumerate(idx):
                     ts[i] = float(s[j])
         except Exception:
